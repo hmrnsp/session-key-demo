@@ -1,3 +1,5 @@
 .claude
 /client/node_modules
 /server/node_modules
+/client/logs
+/server/logs
