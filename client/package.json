@@ -1,0 +1,17 @@
+{
+  "name": "session-key-demo-client",
+  "version": "1.0.0",
+  "description": "Client: menyimpan public key server, bikin session key, handshake, request/response terenkripsi (Express + UI demo + CLI)",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "copy-key": "node scripts/copyPublicKey.js",
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "cli": "node src/cli.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}

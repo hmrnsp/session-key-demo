@@ -1,0 +1,17 @@
+[server] listening on http://localhost:4000
+[server] session TTL: 1800s
+[wire-in] POST /api/auth/login body mentah dari kabel: {
+  iv: 'ff9EnQpDmUJQKHeW',
+  data: 'HO4gcsnMQy3tJzO0x4aE/b1sxSfYp0Xp9vJSeUypMj5YxrLm/JQ1Mj30hms=',
+  tag: '702k/zufQPJGeuO8f3TwSA=='
+}
+[wire-in] POST /api/auth/login body mentah dari kabel: {
+  iv: 'RI7wEiK+iBi50GuU',
+  data: 'HhB62wlWYpJ6TE0w0a5tmxskM9RbDH2wmtWcT/vqQcTWhPeU/CaUQ50QMPY=',
+  tag: 'ZWsrCo0pNL6OSL5+wgnokg=='
+}
+[wire-in] POST /api/auth/login body mentah dari kabel: {
+  iv: 'y819C1fw8aQWkBkb',
+  data: 'gfie5eQ9fcrOohM1hhqlEgp/GKJXflcwIrg4S9+wZ/Dsp+i+6y5IIPVMVJM=',
+  tag: '2E1OoZXX1SHwMzzbISbp5Q=='
+}
