@@ -19,5 +19,7 @@ module.exports = {
   PORT: Number(process.env.PORT || 4000),
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
   SESSION_TTL_SECONDS: Number(process.env.SESSION_TTL_SECONDS || 1800),
-  SERVER_PRIVATE_KEY: fs.readFileSync(PRIVATE_KEY_PATH, 'utf8'),
+  // Kunci RSA long-term server. Di skema X25519 ini TIDAK lagi membuka
+  // bungkusan kunci, melainkan menandatangani transcript handshake.
+  SERVER_SIGNING_KEY: fs.readFileSync(PRIVATE_KEY_PATH, 'utf8'),
 };

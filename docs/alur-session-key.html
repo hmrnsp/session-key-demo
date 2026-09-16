@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alur Kunci Sesi — Handshake, Login, Get Profile (Lengkap)</title>
+<style>
+  :root{
+    --bg:#0D131C; --surface:#151E2A; --surface2:#1D2836; --surface3:#101925;
+    --ink:#E3EAF2; --ink-soft:#98A8BB; --line:#283545;
+    --app:#8D9BF0; --srv:#4FC7BE; --ok:#5FC895; --warn:#DFAC4E; --bad:#F29187;
+    --key:#F0C674;
+    --mono:'Consolas','SFMono-Regular',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;padding:26px 18px 80px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:23px;margin:0 0 6px;letter-spacing:.01em}
+  h2{font-size:17px;margin:34px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  h3{font-size:14px;margin:0}
+  .sub{color:var(--ink-soft);margin:0 0 16px;font-size:14px;max-width:820px}
+  code{font-family:var(--mono);font-size:.92em;background:var(--surface3);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--key)}
+  pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);
+    font-size:12.5px;line-height:1.5;color:var(--ink)}
+
+  /* ---------- legenda ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 8px}
+  .lg{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);
+    background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 11px}
+  .swatch{width:10px;height:10px;border-radius:3px;flex:none}
+  .badge{display:inline-block;font-size:10.5px;font-family:var(--mono);text-transform:uppercase;
+    letter-spacing:.06em;padding:2px 7px;border-radius:999px;border:1px solid;vertical-align:middle}
+  .badge.client{color:var(--app);border-color:color-mix(in srgb,var(--app) 50%, transparent)}
+  .badge.server{color:var(--srv);border-color:color-mix(in srgb,var(--srv) 50%, transparent)}
+  .badge.both{color:var(--key);border-color:color-mix(in srgb,var(--key) 50%, transparent)}
+  .badge.enc{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%, transparent)}
+  .badge.public{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 50%, transparent)}
+  .badge.secret{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 50%, transparent)}
+
+  /* ---------- kartu umum ---------- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:0 0 14px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--ink-soft);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  td.mono,th.mono{font-family:var(--mono);font-size:12px}
+  tr:last-child td{border-bottom:0}
+  .muted{color:var(--ink-soft)}
+  .pill-key{font-family:var(--mono);color:var(--key);font-size:12px}
+
+  /* ---------- tab ---------- */
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 18px}
+  .tab{background:var(--surface);color:var(--ink-soft);border:1px solid var(--line);
+    border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:600;cursor:pointer}
+  .tab:hover{color:var(--ink);border-color:var(--app)}
+  .tab.active{background:var(--surface2);color:var(--ink);border-color:var(--app);
+    box-shadow:inset 0 -2px 0 var(--app)}
+  .panel{display:none}
+  .panel.active{display:block}
+  .panel-sub{color:var(--ink-soft);font-size:13.5px;margin:0 0 14px}
+
+  /* ---------- stepper ---------- */
+  .stepper{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+  .stepper button{background:var(--surface2);color:var(--ink);border:1px solid var(--line);
+    border-radius:7px;padding:7px 13px;font-size:13px;cursor:pointer}
+  .stepper button:disabled{opacity:.4;cursor:default}
+  .stepper button:not(:disabled):hover{border-color:var(--app)}
+  .counter{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft)}
+  .counter b{color:var(--ink)}
+  .alltoggle{margin-left:auto;font-size:12.5px;color:var(--ink-soft);display:inline-flex;
+    align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .pills{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+  .pillstep{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink-soft);font-family:var(--mono);font-size:12px;cursor:pointer}
+  .pillstep:hover{border-color:var(--app);color:var(--ink)}
+  .pillstep.active{background:var(--app);border-color:var(--app);color:#0D131C;font-weight:700}
+  .pillstep.done{border-color:var(--ok);color:var(--ok)}
+
+  /* ---------- langkah ---------- */
+  .step{display:none;background:var(--surface);border:1px solid var(--line);
+    border-left-width:3px;border-radius:10px;padding:16px 18px;margin:0 0 14px}
+  .step.active{display:block}
+  .step.side-client{border-left-color:var(--app)}
+  .step.side-server{border-left-color:var(--srv)}
+  .step.side-both{border-left-color:var(--key)}
+  .step-head{display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+  .step-idx{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+  .step-title{font-size:14.5px;font-weight:700}
+  .io{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 0}
+  @media (max-width:760px){.io{grid-template-columns:1fr}}
+  .io-col{background:var(--surface3);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .io-col h4{margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft)}
+  .io-col.in h4{color:var(--app)}
+  .io-col.op h4{color:var(--key)}
+  .io-col.out h4{color:var(--ok)}
+  .io-col ul{margin:0;padding-left:16px}
+  .io-col li{font-size:12.5px;margin:3px 0}
+  .codeblock{margin:12px 0 0}
+  .codeblock .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 5px}
+  .codeblock pre{background:#0A0F16;border:1px solid var(--line);border-radius:8px;padding:11px 13px;overflow:auto}
+  .note{margin:12px 0 0;font-size:12.5px;color:var(--ink-soft);
+    background:color-mix(in srgb,var(--warn) 8%, transparent);
+    border:1px solid color-mix(in srgb,var(--warn) 35%, transparent);
+    border-radius:8px;padding:9px 12px}
+  .note b{color:var(--warn)}
+
+  /* ---------- pesan (wire / plaintext) ---------- */
+  .msg{margin:12px 0 0;border:1px dashed var(--line);border-radius:9px;padding:11px 13px}
+  .msg-head{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;flex-wrap:wrap}
+  .msg-tabs{display:flex;gap:6px;margin-bottom:8px}
+  .mtab{background:var(--surface2);color:var(--ink-soft);border:1px solid var(--line);
+    border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer}
+  .mtab.active{background:var(--surface3);color:var(--ink);border-color:var(--warn)}
+  .mview{background:#0A0F16;border:1px solid var(--line);border-radius:8px;padding:11px 13px;overflow:auto}
+  .mview.plain{color:var(--ok)}
+  .hidden{display:none}
+
+  .flowline{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);
+    background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 11px;margin:0 0 14px}
+  .flowline .app{color:var(--app);font-weight:700}
+  .flowline .srv{color:var(--srv);font-weight:700}
+  .flowline .arw{color:var(--warn)}
+
+  .arch{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:760px){.arch{grid-template-columns:1fr}}
+  .arch .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .arch .box.client{border-top:3px solid var(--app)}
+  .arch .box.server{border-top:3px solid var(--srv)}
+  .arch h3{margin-bottom:8px}
+  .arch ul{margin:0;padding-left:18px;font-size:12.5px;color:var(--ink-soft)}
+  .arch li{margin:3px 0}
+  footer{margin-top:40px;color:var(--ink-soft);font-size:12px;text-align:center}
+
+  @media print{
+    body{background:#fff;color:#000;padding:0}
+    .tabs,.stepper,.pills,.mtab{display:none!important}
+    .panel{display:block!important}
+    .step{display:block!important;break-inside:avoid;border-color:#bbb}
+    .mview.plain{display:block!important}
+    .mview.wire{display:block!important}
+    .card,.io-col,.msg,.codeblock pre{background:#fff;border-color:#ccc}
+    h2{page-break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Alur Kunci Sesi — Handshake, Login, Get Profile</h1>
+  <p class="sub">
+    Ilustrasi lengkap proses end-to-end: data apa yang diolah, bagaimana cara mengolahnya,
+    apa yang benar-benar lewat kabel, apa yang diterima, dan apa yang diproses di
+    request/response. Mengikuti kode yang ada di folder <code>server/</code> dan <code>client/</code>
+    (X25519 ephemeral-ephemeral + tanda tangan RSA + AES-256-GCM).
+  </p>
+
+  <div class="legend">
+    <span class="lg"><span class="swatch" style="background:var(--app)"></span>Client (app, port 3000)</span>
+    <span class="lg"><span class="swatch" style="background:var(--srv)"></span>Server (port 4000)</span>
+    <span class="lg"><span class="badge public">bukan rahasia</span>boleh disadap</span>
+    <span class="lg"><span class="badge enc">terenkripsi</span>AES-256-GCM</span>
+    <span class="lg"><span class="badge secret">rahasia</span>tak pernah dikirim</span>
+  </div>
+
+  <!-- =================== PETA KOMPONEN =================== -->
+  <h2>0. Peta komponen &amp; kunci</h2>
+  <div class="arch">
+    <div class="box client">
+      <h3><span class="badge client">Client</span> aplikasi</h3>
+      <ul>
+        <li><code>client/src/apiClient.js</code> — pemegang state sesi (sessionId, sessionKey, token) <b>di memori</b></li>
+        <li><code>client/src/crypto/session.js</code> — X25519, verifikasi tanda tangan, AES-GCM</li>
+        <li><code>client/keys/server-public.pem</code> — kunci publik server, <b>ditanam saat build</b></li>
+        <li><code>client/src/index.js</code> — Express UI demo (port 3000)</li>
+      </ul>
+    </div>
+    <div class="box server">
+      <h3><span class="badge server">Server</span> backend</h3>
+      <ul>
+        <li><code>server/src/routes/handshake.js</code> — satu-satunya tempat X25519 + RSA dipakai</li>
+        <li><code>server/src/crypto/x25519.js</code>, <code>rsa.js</code> — ECDH/HKDF &amp; tanda tangan</li>
+        <li><code>server/src/middleware/payloadCrypto.js</code> — dekripsi request &amp; bungkus response</li>
+        <li><code>server/src/store/sessionStore.js</code> (key <code>sk:&lt;id&gt;</code>, TTL) &amp; <code>authTokenStore.js</code></li>
+        <li><code>server/keys/private.pem</code> — kunci RSA long-term, <b>tidak pernah keluar</b></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Kunci</th><th>Dibuat di / disimpan</th><th>Umur</th><th>Fungsi</th></tr></thead>
+      <tbody>
+        <tr><td>RSA private (<code>private.pem</code>)</td><td>Server</td><td>Bertahun-tahun</td><td>Tanda tangan transcript handshake</td></tr>
+        <tr><td>RSA public <span class="muted">(pinned)</span></td><td>Client (ditanam saat build)</td><td>Sama dgn private</td><td>Verifikasi tanda tangan server</td></tr>
+        <tr><td>X25519 ephemeral client</td><td>Client, tiap handshake</td><td>Sekali pakai</td><td>Menghitung shared secret ECDHE</td></tr>
+        <tr><td>X25519 ephemeral server</td><td>Server, tiap handshake</td><td>Sekali pakai</td><td>Menghitung shared secret ECDHE</td></tr>
+        <tr><td>Session key (AES-256)</td><td>Kedua sisi, hasil HKDF-SHA256</td><td>30 menit (default)</td><td>Enkripsi/dekripsi payload, hanya di memori</td></tr>
+        <tr><td>Auth token</td><td>Server saat login</td><td>Selama proses hidup</td><td>Identitas user (terpisah dari session key)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- =================== TABS =================== -->
+  <h2>Alur per tahap</h2>
+  <div class="tabs" id="tabs"></div>
+  <div id="panels"></div>
+
+  <!-- =================== MATRIKS =================== -->
+  <h2>Ringkasan: dikirim / diterima / diproses</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>Tahap</th><th>Client mengirim</th><th>Server memproses</th><th>Server membalas</th><th>Client memproses</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>Handshake</b><br><span class="muted mono">POST /api/session/handshake</span></td>
+          <td>Public key X25519 sementara (polos) + header</td>
+          <td>Validasi key, buat eph server, hitung shared+HKDF, tanda tangani, simpan di store</td>
+          <td>sessionId, serverPublicKey, signature (polos)</td>
+          <td>Verifikasi tanda tangan, hitung shared+HKDF yang sama, simpan di memori</td>
+        </tr>
+        <tr>
+          <td><b>Login</b><br><span class="muted mono">POST /api/auth/login</span></td>
+          <td>Envelope AES <code>{iv,data,tag}</code> dari <code>{username,password}</code> + <code>X-Session-Id</code></td>
+          <td>Ambil session key, dekripsi &amp; verifikasi tag, cek password (bcrypt), terbitkan token, bungkus response</td>
+          <td>Envelope AES dari <code>{token,user}</code> (IV baru)</td>
+          <td>Buka envelope → simpan token di memori</td>
+        </tr>
+        <tr>
+          <td><b>Get Profile</b><br><span class="muted mono">GET /api/profile</span></td>
+          <td>Tanpa body. Header <code>X-Session-Id</code> + <code>X-Auth-Token</code></td>
+          <td>Ambil session key, resolve token→user, ambil data, bungkus response</td>
+          <td>Envelope AES dari <code>{id,username,balance}</code></td>
+          <td>Buka envelope → tampilkan data</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- =================== KEAMANAN =================== -->
+  <h2>Catatan keamanan (yang sengaja dirancang begini)</h2>
+  <div class="card">
+    <ol style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.75">
+      <li><b>Session key tidak pernah lewat kabel.</b> Kedua sisi menghitungnya sendiri dari shared secret X25519 + HKDF.</li>
+      <li><b>Tanda tangan wajib.</b> Client memverifikasi transcript dengan public key yang ditanam; kalau tidak, MITM bisa menukar <code>serverPublicKey</code> dan skema runtuh tanpa gejala.</li>
+      <li><b>Forward secrecy.</b> Kunci X25519 ephemeral dibuang setelah dipakai; kunci RSA long-term hanya menandatangani, bukan membentuk kunci — bocornya di masa depan tidak membuka sesi lama.</li>
+      <li><b>HKDF wajib.</b> Output mentah X25519 tidak seragam; <code>info</code> = transcript dan <code>salt</code> = sessionId mengikat kunci ke kedua public key.</li>
+      <li><b>Tolak shared secret nol</b> (public key tidak valid) sebelum menurunkan kunci.</li>
+      <li><b>IV 12 byte baru tiap pesan</b>; <code>decipher.final()</code> memverifikasi auth tag sehingga payload yang diubah di jalan ditolak.</li>
+      <li><b>Yang dienkripsi hanya body request &amp; response.</b> Header <code>X-Session-Id</code> dan <code>X-Auth-Token</code> dikirim polos — lapisan ini mengandalkan TLS di bawahnya.</li>
+      <li><b>Error middleware</b> (<code>session_missing</code>, <code>session_expired</code>) memang polos (agar client bisa membacanya tanpa kunci); <b>error controller</b> (<code>invalid_credentials</code>, <code>unauthorized</code>) ikut tersegel. Efek samping: di <code>apiClient.js</code> jalur error tidak membuka envelope, jadi pesannya menjadi generik.</li>
+      <li><b>Pin saat build, bukan unduh.</b> Public key server ditanam ke source client; mengunduhnya saat runtime membuka celah MITM.</li>
+    </ol>
+  </div>
+
+  <footer>Session Key Demo — dibuat mengikuti kode <code>server/</code> &amp; <code>client/</code>.</footer>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   Data alur. Tiap langkah: side, title, in[], op[], out[],
+   code (opsional), msg (opsional), note (opsional).
+   msg: { dir:'c2s'|'s2c', label, encrypted, wire, plain }
+   ============================================================ */
+const FLOWS = {
+  handshake: {
+    label: '1. Handshake',
+    subtitle: 'Sekali per sesi. Membuat dua keypair X25519 ephemeral, menghitung session key bersama, dan mengautentikasi server dengan tanda tangan RSA. Session key TIDAK pernah dikirim.',
+    steps: [
+      {
+        side: 'client', title: 'Client membuat kunci ephemeral X25519',
+        in: ['(tidak ada — mulai dari nol)'],
+        op: [
+          "generateKeyPairSync('x25519') → { publicKey, privateKey }",
+          "export publicKey ke JWK (kty/crv/x)",
+        ],
+        out: [
+          'clientPub = { kty:"OKP", crv:"X25519", x:"<32B base64url>" }',
+          'clientPriv — RAHASIA, tetap di memori client',
+        ],
+        code: "const eph = crypto.generateKeyPairSync('x25519');\nconst clientJwk = eph.publicKey.export({ format: 'jwk' });\n// eph.privateKey tidak pernah dikirim ke mana pun",
+      },
+      {
+        side: 'client', title: 'Client mengirim public key-nya',
+        op: ['JSON.stringify({ clientPublicKey: clientJwk })'],
+        out: ['POST /api/session/handshake', 'Header: Content-Type: application/json'],
+        msg: {
+          dir: 'c2s', label: 'Request handshake (memang polos — ini kunci publik)',
+          encrypted: false,
+          wire: {
+            clientPublicKey: { kty: 'OKP', crv: 'X25519', x: 'tzzPNo-zQGrcmQZx_zVAkOJ6kV3HnZaLTY0aue6C7F8' },
+          },
+        },
+      },
+      {
+        side: 'server', title: 'Server memvalidasi public key client',
+        in: ['body.clientPublicKey (JWK) — dikirim polos oleh client'],
+        op: [
+          'Lapis 1 — bentuk: `jwk` harus ada (truthy) dan field `x` bertipe string',
+          "Lapis 2 — parameter: `kty === 'OKP'` dan `crv === 'X25519'` (dicek manual)",
+          'Lapis 3 — parsing kripto: `createPublicKey({ key, format:"jwk" })` memvalidasi encoding base64url `x` dan panjangnya (wajib 32 byte)',
+          'Gagal di lapis mana pun → throw, ditangkap try/catch → satu balasan 400 yang sama (tidak membocorkan detail)',
+        ],
+        out: [
+          'clientPub (KeyObject X25519) siap dipakai `diffieHellman`',
+          'invalid → `res.status(400).json({ error: "clientPublicKey (JWK X25519) wajib diisi" })`',
+        ],
+        note: "Kenapa cek crv manual penting: Node MENERIMA JWK ber-crv 'Ed25519' dan menghasilkan KeyObject bertipe ed25519 (bukan X25519) — jadi tanpa cek manual, tipe kunci yang salah bisa lolos. Node sendiri menolak x yang salah panjang/encoding dengan ERR_CRYPTO_INVALID_JWK, dan kty/x yang hilang dengan ERR_INVALID_ARG_TYPE.",
+        code: "function jwkToPublicKey(jwk) {\n  if (!jwk || jwk.kty !== 'OKP' ||\n      jwk.crv !== 'X25519' || typeof jwk.x !== 'string') {\n    throw new Error('public key X25519 (JWK) tidak valid');\n  }\n  // Node memvalidasi encoding base64url & panjang x (harus 32 byte);\n  // JWK cacat -> ERR_CRYPTO_INVALID_JWK.\n  return crypto.createPublicKey({ key: jwk, format: 'jwk' });\n}\n\n// handshake.js — SEMUA kegagalan jadi satu balasan generik\ntry {\n  clientPublic = jwkToPublicKey(clientPublicKey);\n} catch (err) {\n  return res.status(400).json({ error: 'clientPublicKey (JWK X25519) wajib diisi' });\n}",
+      },
+      {
+        side: 'server', title: 'Server membuat kunci ephemeral X25519 sendiri',
+        op: ["generateKeyPairSync('x25519')", 'export publicKey ke JWK'],
+        out: ['serverPub (dikirim)', 'serverPriv — RAHASIA, dibuang setelah dipakai'],
+        code: "const serverEph = crypto.generateKeyPairSync('x25519');\nconst serverJwk = serverEph.publicKey.export({ format: 'jwk' });",
+      },
+      {
+        side: 'server', title: 'Server membuat sessionId acak',
+        op: ['crypto.randomUUID()'],
+        out: ['sessionId (UUID) — dipakai sebagai salt HKDF & kunci store'],
+        code: "const sessionId = crypto.randomUUID();",
+      },
+      {
+        side: 'both', title: 'Kedua sisi menyusun transcript yang identik',
+        op: [
+          "Buffer.from('session-key-demo/x25519/v1\\n' + client.x + '\\n' + server.x)",
+        ],
+        out: ['transcript (bytes) — urutan tetap: client dulu, lalu server'],
+        note: 'Transcript inilah yang ditandatangani server dan diverifikasi client, sehingga kedua public key terikat pada satu sesi.',
+        code: "const transcript = Buffer.from(\n  'session-key-demo/x25519/v1\\n' + client.x + '\\n' + server.x,\n  'utf8');",
+      },
+      {
+        side: 'server', title: 'Server menghitung shared secret & menurunkan session key',
+        op: [
+          '`diffieHellman({ privateKey: serverPriv, publicKey: clientPub })` → shared 32B',
+          'guard: tolak jika shared semua byte 0 (indikasi titik orde rendah)',
+          "`hkdfSync('sha256', shared, salt=Buffer.from(sessionId), info=transcript, 32)`",
+        ],
+        out: ['sessionKey (32 byte = AES-256)'],
+        note: 'Di Node/OpenSSL, public key tidak valid semacam titik all-zero biasanya sudah ditolak saat diffieHellman (ERR_OSSL_FAILED_DURING_DERIVATION); pemeriksaan all-zero eksplisit tetap dipertahankan sebagai pengaman portabel. Kegagalan apa pun → 400 key_exchange_failed.',
+        code: "const shared = crypto.diffieHellman({\n  privateKey: serverEph.privateKey, publicKey: clientPub,\n});\nif (shared.every((b) => b === 0)) throw new Error('shared nol');\nconst sessionKey = Buffer.from(\n  crypto.hkdfSync('sha256', shared, Buffer.from(sessionId), transcript, 32));",
+      },
+      {
+        side: 'server', title: 'Server membuang private key ephemeral',
+        op: ['serverEph.privateKey = null'],
+        out: ['tidak ada salinan private eph yang tersisa'],
+        note: 'Inilah yang memberi forward secrecy: private key sekali pakai, bukan kunci panjang umur.',
+        code: "serverEph.privateKey = null;",
+      },
+      {
+        side: 'server', title: 'Server menandatangani transcript dengan kunci RSA long-term',
+        op: [
+          "sign('sha256', transcript, { padding: RSA_PKCS1_PSS_PADDING, saltLength: RSA_PSS_SALTLEN_DIGEST, key: private.pem })",
+        ],
+        out: ['signature (base64)'],
+        code: "const signature = crypto.sign('sha256', transcript, {\n  key: SERVER_SIGNING_KEY,\n  padding: crypto.constants.RSA_PKCS1_PSS_PADDING,\n  saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,\n}).toString('base64');",
+      },
+      {
+        side: 'server', title: 'Server menyimpan session key & membalas',
+        op: [
+          "sessionStore.set('sk:<sessionId>', base64(sessionKey), TTL=1800)",
+          'res.json({ sessionId, expiresIn, serverPublicKey, signature })',
+        ],
+        out: ['balasan polos (tidak perlu dienkripsi: public key + tanda tangan)'],
+        msg: {
+          dir: 's2c', label: 'Response handshake', encrypted: false,
+          wire: {
+            sessionId: '56cda2c4-d354-4937-92d6-e529c33efb70',
+            expiresIn: 1800,
+            serverPublicKey: { kty: 'OKP', crv: 'X25519', x: 'GwKdWUNjVN6B4X6DJjJGY2PrBqbSnnWk4zjkkGcMakE' },
+            signature: 'G1u3ZyhYQb8O8fH/gzHSTofeeKf0GFYmIiSlLp83B1vS3RLxN4iPNoJrgung0…(base64, 342 byte)',
+          },
+        },
+      },
+      {
+        side: 'client', title: 'Client memverifikasi tanda tangan (WAJIB)',
+        in: ['serverPublicKey, signature'],
+        op: [
+          'susun transcript yang sama',
+          "verify('sha256', transcript, { key: server-public.pem, PSS }, signature)",
+          'jika false → lempar error & BATALKAN handshake',
+        ],
+        out: ['key terautentikasi', 'penyerang/MITM tidak bisa menukar serverPublicKey'],
+        code: "const transcript = buildTranscript(clientJwk, serverPublicKey);\nconst ok = crypto.verify('sha256', transcript, {\n  key: SERVER_PUBLIC_KEY,\n  padding: crypto.constants.RSA_PKCS1_PSS_PADDING,\n  saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,\n}, Buffer.from(signature, 'base64'));\nif (!ok) throw new Error('Tanda tangan server tidak valid — kemungkinan MITM');",
+      },
+      {
+        side: 'client', title: 'Client menghitung session key yang sama',
+        op: [
+          'diffieHellman({ privateKey: clientPriv, publicKey: serverPub }) → shared',
+          'hkdfSync(...) dengan salt & info yang sama persis',
+        ],
+        out: ['sessionKey (32B) — harus identik dengan milik server'],
+        code: "const shared = crypto.diffieHellman({\n  privateKey: eph.privateKey, publicKey: jwkToPublicKey(serverPublicKey),\n});\nconst sessionKey = Buffer.from(\n  crypto.hkdfSync('sha256', shared, Buffer.from(sessionId), transcript, 32));",
+      },
+      {
+        side: 'client', title: 'Client menyimpan sesi di memori',
+        op: ['simpan sessionId, sessionKey, expiresAt = now + expiresIn×1000'],
+        out: ['sesi siap dipakai Login & Get Profile'],
+        note: 'Session key hanya hidup sebagai variabel di memori proses — tidak ditulis ke disk/localStorage, dan tidak pernah dikirim utuh.',
+        code: "this.sessionId = sessionId;\nthis.sessionKey = sessionKey; // Buffer, hanya di memori\nthis.expiresAt = Date.now() + expiresIn * 1000;",
+      },
+    ],
+  },
+
+  login: {
+    label: '2. Login',
+    subtitle: 'Mengirim username & password yang dibungkus AES-256-GCM dengan session key. Controller di server bekerja pada data polos — semua kripto terjadi di middleware.',
+    steps: [
+      {
+        side: 'client', title: 'Client memastikan sesi masih segar',
+        op: ['isSessionFresh()', 'jika tidak fresh → handshake ulang dulu'],
+        out: ['sessionKey siap'],
+        code: "if (!this.isSessionFresh()) await this.handshake();",
+      },
+      {
+        side: 'client', title: 'Client membungkus body dengan seal()',
+        in: ['{ username: "demo", password: "password123" }'],
+        op: [
+          'iv = randomBytes(12)',
+          "createCipheriv('aes-256-gcm', sessionKey, iv)",
+          'ciphertext = update(JSON.stringify(body)) + final()',
+          'tag = cipher.getAuthTag()',
+        ],
+        out: ['envelope { iv, data, tag } (base64)'],
+        code: "const iv = crypto.randomBytes(12); // WAJIB baru tiap pesan\nconst cipher = crypto.createCipheriv('aes-256-gcm', sessionKey, iv);\nconst data = Buffer.concat([\n  cipher.update(JSON.stringify(body), 'utf8'), cipher.final(),\n]);\nconst tag = cipher.getAuthTag();",
+        msg: {
+          dir: 'c2s', label: 'POST /api/auth/login · header: Content-Type, X-Session-Id',
+          encrypted: true,
+          wire: {
+            iv: 'V60VQoJW/pUBfF+M',
+            data: '9omo2JtcLyA9i2uXI2lzqRrXopYgTk/URglt+wSBLBvk9GEo…',
+            tag: '/BQPK4Kf6Ms81Gs8kBvPdg==',
+          },
+          plain: { username: 'demo', password: 'password123' },
+        },
+      },
+      {
+        side: 'server', title: 'Middleware mengambil session key dari header',
+        in: ['header X-Session-Id'],
+        op: [
+          "sessionStore.get('sk:<sessionId>')",
+          'kosong → 401 session_missing (polos)',
+          'null/kedaluwarsa → 401 session_expired (polos)',
+        ],
+        out: ['sessionKey (32B) di req.sessionKey'],
+        code: "const sessionId = req.header('X-Session-Id');\nif (!sessionId) return res.status(401).json({ error: 'session_missing' });\nconst key = await sessionStore.get('sk:' + sessionId);\nif (!key) return res.status(401).json({ error: 'session_expired' });",
+      },
+      {
+        side: 'server', title: 'Middleware mendekripsi & memverifikasi body',
+        in: ['envelope { iv, data, tag }'],
+        op: [
+          "createDecipheriv('aes-256-gcm', sessionKey, iv)",
+          'setAuthTag(tag) lalu update + final()',
+          'gagal verifikasi → 400 invalid_payload (polos)',
+        ],
+        out: ['req.body = { username, password } polos'],
+        note: 'Controller di belakangnya tidak tahu-menahu soal kripto — ia hanya melihat req.body biasa.',
+        code: "const decipher = crypto.createDecipheriv('aes-256-gcm', sessionKey, iv);\ndecipher.setAuthTag(Buffer.from(tag, 'base64'));\nconst plain = Buffer.concat([\n  decipher.update(Buffer.from(data, 'base64')), decipher.final(),\n]);\nreq.body = JSON.parse(plain.toString('utf8'));",
+      },
+      {
+        side: 'server', title: 'Controller auth.js memeriksa kredensial',
+        in: ['req.body { username, password }'],
+        op: [
+          'findByUsername(username) → user',
+          'verifyPassword(user, password) → bcrypt.compareSync',
+        ],
+        out: ['user valid atau null → 401 invalid_credentials'],
+        code: "const user = findByUsername(username);\nconst ok = verifyPassword(user, password); // bcrypt.compareSync",
+      },
+      {
+        side: 'server', title: 'Controller menerbitkan token',
+        op: [
+          'authTokenStore.issue(user.id)',
+          'token = randomBytes(24).toString("hex")',
+          'res.json({ token, user })',
+        ],
+        out: ['token (48 hex) + user'],
+        code: "const token = crypto.randomBytes(24).toString('hex');\ntokens.set(token, user.id);\nres.json({ token, user: { id: user.id, username: user.username } });",
+      },
+      {
+        side: 'server', title: 'Middleware membungkus response',
+        op: ['res.json ditimpa → seal(sessionKey, payload) dengan IV BARU'],
+        out: ['envelope response'],
+        code: "res.json = (payload) => originalJson(seal(sessionKey, payload));",
+        msg: {
+          dir: 's2c', label: 'Response login', encrypted: true,
+          wire: {
+            iv: '8z0bBdNY9SKN0khL',
+            data: 'QMBx2GRWIvuJPlGEvwNRTER9P2x8ge1oCtq2VRs0igDe8gwj…',
+            tag: 'GpsqPstCsrIlOUjfc2Az0Q==',
+          },
+          plain: {
+            token: '54a60cf13dcd409c73efa019b04895acf09893bdeef89523',
+            user: { id: 'u_1', username: 'demo' },
+          },
+        },
+      },
+      {
+        side: 'client', title: 'Client membuka response & menyimpan token',
+        in: ['envelope response'],
+        op: ['open(sessionKey, raw) → { token, user }', 'setAuthToken(token)'],
+        out: ['token di memori, siap untuk request berikutnya'],
+        code: "const { token, user } = open(this.sessionKey, raw);\nthis.setAuthToken(token); // hanya di memori",
+      },
+    ],
+  },
+
+  profile: {
+    label: '3. Get Profile',
+    subtitle: 'Request tanpa body (tidak ada data rahasia yang dikirim), response berisi data sensitif yang dibungkus AES-256-GCM.',
+    steps: [
+      {
+        side: 'client', title: 'Client menyiapkan request tanpa body',
+        op: ['ensureSession()', 'GET /api/profile'],
+        out: ['Header: X-Session-Id + X-Auth-Token (polos, mengandalkan TLS)'],
+        note: 'Karena GET tidak punya body rahasia, tidak ada envelope request — hanya token identitas di header.',
+        code: "await this.ensureSession();\n// GET /api/profile — headers: X-Session-Id, X-Auth-Token",
+      },
+      {
+        side: 'server', title: 'Middleware mengambil session key',
+        in: ['header X-Session-Id'],
+        op: ["sessionStore.get('sk:<sessionId>')", 'null → 401 session_expired (polos)'],
+        out: ['sessionKey (32B)'],
+        code: "const sessionKeyBase64 = await sessionStore.get('sk:' + sessionId);",
+      },
+      {
+        side: 'server', title: 'Middleware melewati dekripsi body (GET)',
+        op: ['tidak ada body → tidak ada yang didekripsi', 'res.json tetap dibungkus seal()'],
+        out: ['response akan otomatis terenkripsi'],
+        code: "// GET -> body kosong, tidak ada yang didekripsi;\n// res.json tetap dibungkus seal()",
+      },
+      {
+        side: 'server', title: 'Controller profile.js me-resolve identitas',
+        in: ['header X-Auth-Token'],
+        op: [
+          'authTokenStore.resolve(token) → userId',
+          'findById(userId) → user',
+          'tidak ada → 401 unauthorized (tersegel)',
+        ],
+        out: ['user'],
+        code: "const userId = authTokenStore.resolve(token);\nconst user = findById(userId);\nif (!user) return res.status(401).json({ error: 'unauthorized' });",
+      },
+      {
+        side: 'server', title: 'Controller mengirim data sensitif',
+        op: ['res.json({ id, username, balance })'],
+        out: ['payload polos yang akan diseal middleware'],
+        code: "res.json({ id: user.id, username: user.username, balance: user.balance });",
+      },
+      {
+        side: 'server', title: 'Middleware membungkus response',
+        op: ['seal(sessionKey, payload) — IV baru'],
+        out: ['envelope response'],
+        code: "res.json = (payload) => originalJson(seal(sessionKey, payload));",
+        msg: {
+          dir: 's2c', label: 'Response profile', encrypted: true,
+          wire: {
+            iv: 'vEdmmdYNAxnOFvaC',
+            data: 'nkr1jN+wmXt43l+DiBTH0dCBvZrtVRsMVk9a9aYopbV9SgMv…',
+            tag: '7fCBdUtcTenNvG6Hu9bIzQ==',
+          },
+          plain: { id: 'u_1', username: 'demo', balance: 1250000 },
+        },
+      },
+      {
+        side: 'client', title: 'Client membuka & menampilkan profil',
+        in: ['envelope response'],
+        op: ['open(sessionKey, raw) → { id, username, balance }'],
+        out: ['data siap ditampilkan di UI'],
+        code: "const profile = open(this.sessionKey, raw);\n// { id: 'u_1', username: 'demo', balance: 1250000 }",
+      },
+    ],
+  },
+
+  expiry: {
+    label: '4. Kedaluwarsa & rotasi',
+    subtitle: 'Kalau session key habis, server membalas 401 polos; client otomatis handshake ulang dan mengulang request sekali — transparan bagi pengguna.',
+    steps: [
+      {
+        side: 'server', title: 'Session key kedaluwarsa',
+        op: ['TTL habis → sessionStore menghapus key (timer setTimeout)'],
+        out: ['sk:<sessionId> tidak ada lagi'],
+        code: "const timer = setTimeout(() => store.delete(key), ttlSeconds * 1000);",
+      },
+      {
+        side: 'client', title: 'Client masih mengirim sessionId lama',
+        op: ['request biasa dengan X-Session-Id lama'],
+        out: ['request ditolak oleh server'],
+        code: "// client belum tahu sesi sudah habis",
+      },
+      {
+        side: 'server', title: 'Server membalas 401 polos (tidak diseal)',
+        op: ['tidak ada kunci untuk membungkus → balasan sengaja polos'],
+        out: ['{ error: "session_expired" }'],
+        note: 'Balasan polos ini disengaja: client harus bisa membacanya tanpa kunci agar tahu perlu handshake ulang.',
+        code: "return res.status(401).json({ error: 'session_expired' });",
+        msg: {
+          dir: 's2c', label: 'Response 401', encrypted: false,
+          wire: { error: 'session_expired', message: 'Session key kedaluwarsa, lakukan handshake ulang.' },
+        },
+      },
+      {
+        side: 'client', title: 'Client handshake ulang & ulangi sekali',
+        in: ['raw.error === "session_expired"'],
+        op: ['handshake() untuk kunci baru', 'ulangi request SEKALI dengan retry=false'],
+        out: ['request sukses tanpa campur tangan pengguna'],
+        code: "if (res.status === 401 && raw.error === 'session_expired' && retry) {\n  await this.handshake();\n  return this.request(method, path, body, { debug, retry: false });\n}",
+      },
+    ],
+  },
+};
+
+/* ============================================================
+   Helper
+   ============================================================ */
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// esc lalu dukung inline `code` (backtick) -> <code>
+function rc(s) {
+  return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+function fmt(v) {
+  return typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+}
+function listOrEmpty(items, cls) {
+  if (!items || !items.length) return '';
+  return '<ul>' + items.map((i) => '<li>' + esc(i) + '</li>').join('') + '</ul>';
+}
+function ioCol(cls, title, items) {
+  if (!items || !items.length) return '';
+  return '<div class="io-col ' + cls + '"><h4>' + title + '</h4>' +
+    '<ul>' + items.map((i) => '<li>' + rc(i) + '</li>').join('') + '</ul></div>';
+}
+function codeBlock(code, label) {
+  if (!code) return '';
+  return '<div class="codeblock"><p class="lbl">' + esc(label || 'Kode (yang dijalankan)') + '</p>' +
+    '<pre>' + esc(code) + '</pre></div>';
+}
+function msgBlock(m, uid) {
+  if (!m) return '';
+  if (!m.encrypted) {
+    return '<div class="msg"><div class="msg-head">' +
+      '<span class="badge public">bukan rahasia</span> ' + esc(m.label || '') +
+      '</div><pre class="mview">' + esc(fmt(m.wire)) + '</pre></div>';
+  }
+  return '<div class="msg" data-msg>' +
+    '<div class="msg-head"><span class="badge enc">terenkripsi</span> ' + esc(m.label || '') + '</div>' +
+    '<div class="msg-tabs">' +
+      '<button class="mtab active" data-view="wire" data-uid="' + uid + '">Di kabel (mentah)</button>' +
+      '<button class="mtab" data-view="plain" data-uid="' + uid + '">Setelah dibuka</button>' +
+    '</div>' +
+    '<pre class="mview wire" data-view-for="' + uid + '">' + esc(fmt(m.wire)) + '</pre>' +
+    '<pre class="mview plain hidden" data-view-for="' + uid + '">' + esc(fmt(m.plain)) + '</pre>' +
+  '</div>';
+}
+function stepCard(flowKey, step, i) {
+  const uid = flowKey + '-msg-' + i;
+  const badge = step.side === 'client'
+    ? '<span class="badge client">Client</span>'
+    : step.side === 'server'
+      ? '<span class="badge server">Server</span>'
+      : '<span class="badge both">Kedua sisi</span>';
+  const active = i === 0 ? ' active' : '';
+  return '<article class="step side-' + step.side + active + '" data-step="' + i + '">' +
+    '<div class="step-head"><span class="step-idx">Langkah ' + (i + 1) + '</span>' + badge +
+      '<span class="step-title">' + esc(step.title) + '</span></div>' +
+    '<div class="io">' + ioCol('in', 'Masuk', step.in) + ioCol('op', 'Diolah', step.op) + ioCol('out', 'Keluar', step.out) + '</div>' +
+    codeBlock(step.code) +
+    (step.note ? '<p class="note"><b>Catatan:</b> ' + rc(step.note) + '</p>' : '') +
+    msgBlock(step.msg, uid) +
+  '</article>';
+}
+function flowPanel(key, flow) {
+  const pills = flow.steps.map((_, i) =>
+    '<button class="pillstep' + (i === 0 ? ' active' : '') + '" data-jump="' + i + '">' + (i + 1) + '</button>').join('');
+  return '<section class="panel' + (key === 'handshake' ? ' active' : '') + '" data-flow="' + key + '">' +
+    '<p class="panel-sub">' + esc(flow.subtitle) + '</p>' +
+    '<div class="stepper">' +
+      '<button data-act="prev" disabled>‹ Sebelumnya</button>' +
+      '<span class="counter">Langkah <b data-cur>1</b> / ' + flow.steps.length + '</span>' +
+      '<button data-act="next">Berikutnya ›</button>' +
+      '<label class="alltoggle"><input type="checkbox" data-act="all"> Tampilkan semua</label>' +
+    '</div>' +
+    '<div class="pills">' + pills + '</div>' +
+    '<div class="steps">' + flow.steps.map((s, i) => stepCard(key, s, i)).join('') + '</div>' +
+  '</section>';
+}
+
+/* ============================================================
+   Render
+   ============================================================ */
+const tabsEl = document.getElementById('tabs');
+const panelsEl = document.getElementById('panels');
+const keys = Object.keys(FLOWS);
+
+tabsEl.innerHTML = keys.map((k) =>
+  '<button class="tab' + (k === keys[0] ? ' active' : '') + '" data-tab="' + k + '">' + esc(FLOWS[k].label) + '</button>').join('');
+panelsEl.innerHTML = keys.map((k) => flowPanel(k, FLOWS[k])).join('');
+
+/* Tab switching */
+tabsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  const key = btn.dataset.tab;
+  tabsEl.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === btn));
+  panelsEl.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.dataset.flow === key));
+});
+
+/* Wire/plaintext toggle */
+panelsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mtab');
+  if (!btn) return;
+  const uid = btn.dataset.uid;
+  const view = btn.dataset.view;
+  const box = btn.closest('.msg');
+  box.querySelectorAll('.mtab').forEach((t) => t.classList.toggle('active', t === btn));
+  box.querySelectorAll('[data-view-for="' + uid + '"]').forEach((pre) => {
+    pre.classList.toggle('hidden', pre.classList.contains(view) === false);
+  });
+});
+
+/* Stepper per panel */
+function initStepper(panel) {
+  const steps = Array.from(panel.querySelectorAll('.step'));
+  const pills = Array.from(panel.querySelectorAll('.pillstep'));
+  const curEl = panel.querySelector('[data-cur]');
+  const prev = panel.querySelector('[data-act="prev"]');
+  const next = panel.querySelector('[data-act="next"]');
+  const all = panel.querySelector('[data-act="all"]');
+  let cur = 0;
+
+  function showAll(on) {
+    panel.classList.toggle('show-all', on);
+    steps.forEach((s, i) => s.classList.toggle('active', on || i === cur));
+    prev.disabled = on || cur === 0;
+    next.disabled = on || cur === steps.length - 1;
+  }
+  function go(i) {
+    cur = Math.max(0, Math.min(steps.length - 1, i));
+    curEl.textContent = cur + 1;
+    steps.forEach((s, idx) => s.classList.toggle('active', idx === cur));
+    pills.forEach((p, idx) => {
+      p.classList.toggle('active', idx === cur);
+      p.classList.toggle('done', idx < cur);
+    });
+    prev.disabled = cur === 0;
+    next.disabled = cur === steps.length - 1;
+    if (all.checked) all.checked = false, panel.classList.remove('show-all');
+  }
+
+  prev.addEventListener('click', () => go(cur - 1));
+  next.addEventListener('click', () => go(cur + 1));
+  pills.forEach((p) => p.addEventListener('click', () => go(Number(p.dataset.jump))));
+  all.addEventListener('change', () => showAll(all.checked));
+  go(0);
+}
+panelsEl.querySelectorAll('.panel').forEach(initStepper);
+
+/* Print: tampilkan semua langkah */
+window.addEventListener('beforeprint', () => {
+  panelsEl.querySelectorAll('.panel').forEach((p) => p.classList.add('active'));
+  panelsEl.querySelectorAll('.step').forEach((s) => s.classList.add('active'));
+});
+window.addEventListener('afterprint', () => {
+  panelsEl.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.dataset.flow === keys[0]));
+  panelsEl.querySelectorAll('.step').forEach((s, i) => s.classList.toggle('active', i === 0));
+});
+</script>
+</body>
+</html>

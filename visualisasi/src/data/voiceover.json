@@ -1,0 +1,80 @@
+{
+  "voice": {
+    "modelId": "eleven_multilingual_v2",
+    "outputFormat": "mp3_44100_128",
+    "settings": {
+      "stability": 0.5,
+      "similarity_boost": 0.75,
+      "style": 0.3,
+      "use_speaker_boost": true
+    }
+  },
+  "lines": [
+    {
+      "id": "Intro",
+      "label": "Judul",
+      "seconds": 6.2,
+      "text": "Setiap kali Anda membuka aplikasi bank, data Anda menempuh perjalanan yang berbahaya."
+    },
+    {
+      "id": "Masalah",
+      "label": "Masalah",
+      "seconds": 8,
+      "text": "Tanpa pelindung, password dan saldo terkirim apa adanya. Penyadap bisa membacanya dengan mudah."
+    },
+    {
+      "id": "IdeBesar",
+      "label": "Ide besar",
+      "seconds": 7,
+      "text": "Solusinya, bungkus semua data dengan kunci sesi. Ada dua kunci yang bekerja bersama."
+    },
+    {
+      "id": "Persiapan",
+      "label": "Langkah nol",
+      "seconds": 8,
+      "text": "Bank membuat sepasang kunci. Anak kuncinya disimpan rahasia dan tidak pernah keluar. Gembok publiknya ditanam di aplikasi Anda."
+    },
+    {
+      "id": "Handshake",
+      "label": "Handshake",
+      "seconds": 10,
+      "text": "Aplikasi membuat kunci rahasia baru, lalu menguncinya dengan gembok publik bank. Hanya bank yang bisa membukanya, dan sesi pun resmi dibuka."
+    },
+    {
+      "id": "Login",
+      "label": "Login",
+      "seconds": 8,
+      "text": "Saat Anda login, password berubah menjadi kode acak. Di kabel tidak ada yang bisa dibaca, di bank datanya terbuka kembali."
+    },
+    {
+      "id": "Profil",
+      "label": "Data bank",
+      "seconds": 7,
+      "text": "Begitu juga saldo Anda. Balasan bank dienkripsi dengan kunci rahasia yang sama, lalu dibuka di HP Anda."
+    },
+    {
+      "id": "Sadap",
+      "label": "Serangan: sadap",
+      "seconds": 7,
+      "text": "Penyadap hanya melihat kode acak. Tanpa kunci rahasia, isinya tidak berarti apa-apa."
+    },
+    {
+      "id": "UbahIsi",
+      "label": "Serangan: ubah isi",
+      "seconds": 7,
+      "text": "Kalau penyadap mencoba mengubah data, segel pengaman rusak, dan server langsung menolaknya."
+    },
+    {
+      "id": "Kedaluwarsa",
+      "label": "Kunci kedaluwarsa",
+      "seconds": 7.4,
+      "text": "Ketika kunci lama habis masa berlakunya, aplikasi membuat kunci baru secara otomatis. Anda tidak merasa apa-apa."
+    },
+    {
+      "id": "Penutup",
+      "label": "Penutup",
+      "seconds": 8,
+      "text": "Handshake sekali, kunci sesi dua arah, dan segel yang menolak perubahan. Rahasia tetap rahasia, dari HP sampai core banking."
+    }
+  ]
+}

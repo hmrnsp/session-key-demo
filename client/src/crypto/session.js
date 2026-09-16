@@ -3,30 +3,59 @@
 const crypto = require('crypto');
 
 /**
- * Setara `src/crypto/session.ts` di konsep asli (di sana pakai
- * react-native-quick-crypto; di sini Node `crypto` bawaan — API-nya sengaja
- * dipilih sama persis: randomBytes, publicEncrypt, createCipheriv/decipheriv,
- * getAuthTag/setAuthTag).
+ * Sisi client dari X25519 ephemeral-ephemeral (ECDHE).
+ *
+ * Client membuat keypair X25519 sekali pakai, mengirim public key-nya, lalu
+ * menghitung sendiri session key dari shared secret. Private key ephemeral
+ * dibuang setelah dipakai — tidak ada yang menyentuh disk.
+ *
+ * Verifikasi tanda tangan server wajib dilakukan SEBELUM memakai public key
+ * server; tanpa itu MITM bisa menukarnya dan seluruh skema runtuh tanpa gejala.
  */
 
-// ① Session key lahir di client, bukan di server. 32 byte acak = AES-256.
-// Beda tiap pengguna, tiap sesi.
-function generateSessionKey() {
-  return crypto.randomBytes(32);
+const PROTOCOL_LABEL = 'session-key-demo/x25519/v1';
+
+// ① Keypair ephemeral — sekali pakai per sesi.
+function generateEphemeralKeyPair() {
+  return crypto.generateKeyPairSync('x25519');
 }
 
-// ② Bungkus session key dengan RSA public key server (ditanam saat build).
-// Setelah baris ini, client sendiri TIDAK bisa membuka bungkusannya lagi —
-// hanya private key di server yang bisa.
-function wrapSessionKey(serverPublicKeyPem, sessionKey) {
-  return crypto.publicEncrypt(
+function publicKeyToJwk(publicKey) {
+  return publicKey.export({ format: 'jwk' });
+}
+
+function jwkToPublicKey(jwk) {
+  if (!jwk || jwk.kty !== 'OKP' || jwk.crv !== 'X25519' || typeof jwk.x !== 'string') {
+    throw new Error('public key X25519 (JWK) tidak valid');
+  }
+  return crypto.createPublicKey({ key: jwk, format: 'jwk' });
+}
+
+function buildTranscript(clientJwk, serverJwk) {
+  return Buffer.from(`${PROTOCOL_LABEL}\n${clientJwk.x}\n${serverJwk.x}`, 'utf8');
+}
+
+// ② Verify tanda tangan server dengan public key yang ditanam saat build.
+function verifyTranscript(serverPublicKeyPem, transcript, signatureBase64) {
+  return crypto.verify(
+    'sha256',
+    transcript,
     {
       key: serverPublicKeyPem,
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: 'sha256',
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
     },
-    sessionKey,
+    Buffer.from(signatureBase64, 'base64'),
   );
+}
+
+// ③ shared = X25519(clientPriv, serverPub); tolak titik nol, lalu HKDF-SHA256.
+function deriveSessionKey(privateKey, peerPublicKey, salt, transcript) {
+  const shared = crypto.diffieHellman({ privateKey, publicKey: peerPublicKey });
+  if (shared.every((byte) => byte === 0)) {
+    throw new Error('shared secret X25519 nol (public key tidak valid)');
+  }
+  return Buffer.from(crypto.hkdfSync('sha256', shared, salt, transcript, 32));
 }
 
 // Enkripsi payload keluar (dipakai untuk request DAN untuk membaca konsep
@@ -45,7 +74,8 @@ function seal(sessionKey, payload) {
   };
 }
 
-// ③ Dekripsi response — dibuka dengan session key, BUKAN dengan public key.
+// ④ Dekripsi response — dibuka dengan session key hasil turunan, BUKAN
+//    dengan public key.
 function open(sessionKey, envelope) {
   const decipher = crypto.createDecipheriv(
     'aes-256-gcm',
@@ -60,4 +90,14 @@ function open(sessionKey, envelope) {
   return JSON.parse(plaintext.toString('utf8'));
 }
 
-module.exports = { generateSessionKey, wrapSessionKey, seal, open };
+module.exports = {
+  PROTOCOL_LABEL,
+  generateEphemeralKeyPair,
+  publicKeyToJwk,
+  jwkToPublicKey,
+  buildTranscript,
+  verifyTranscript,
+  deriveSessionKey,
+  seal,
+  open,
+};

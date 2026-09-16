@@ -2,24 +2,36 @@
 
 const { SessionClient } = require('./apiClient');
 
-function printWire(label, envelope) {
-  if (!envelope) {
+// Bisa mencetak dua bentuk: envelope AES { iv, data, tag } untuk request
+// biasa, dan objek handshake (public key / tanda tangan) apa adanya.
+function printWire(label, value) {
+  if (!value) {
     console.log(`  ${label}: (tidak ada body)`);
     return;
   }
   console.log(`  ${label}:`);
-  console.log(`    iv:   ${envelope.iv}`);
-  console.log(`    data: ${envelope.data.slice(0, 48)}${envelope.data.length > 48 ? '…' : ''}`);
-  console.log(`    tag:  ${envelope.tag}`);
+  if (value.iv && value.data && value.tag) {
+    console.log(`    iv:   ${value.iv}`);
+    console.log(`    data: ${value.data.slice(0, 48)}${value.data.length > 48 ? '…' : ''}`);
+    console.log(`    tag:  ${value.tag}`);
+    return;
+  }
+  const json = JSON.stringify(value, null, 2).split('\n').join('\n    ');
+  console.log(`    ${json}`);
 }
 
 async function main() {
   const client = new SessionClient();
 
-  console.log('=== Fase 0-1: handshake ===');
-  const { sessionId, expiresIn } = await client.handshake();
+  console.log('=== Fase 0-1: handshake (X25519 ephemeral-ephemeral) ===');
+  const hsDebug = {};
+  const { sessionId, expiresIn } = await client.handshake({ debug: hsDebug });
+  console.log('Yang dikirim (public key sementara — TIDAK ada kunci sesi):');
+  printWire('sent', hsDebug.sent);
+  console.log('Yang diterima (public key server + tanda tangan):');
+  printWire('received', hsDebug.received);
   console.log('sessionId:', sessionId, `(berlaku ${expiresIn}s)`);
-  console.log('session key (HANYA di memori, tidak pernah ditulis ke disk):', client.sessionKey.toString('hex'));
+  console.log('Session key hasil hitungan X25519 (HANYA di memori, tidak pernah dikirim/ditulis ke disk):', client.sessionKey.toString('hex'));
 
   console.log('\n=== Fase 2-3: POST /api/auth/login ===');
   const loginDebug = {};

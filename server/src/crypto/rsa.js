@@ -3,18 +3,29 @@
 const crypto = require('crypto');
 
 /**
- * Fase 1 ③ — hanya private key di server yang bisa membuka bungkusan ini.
- * Tidak ada salinan private key di aplikasi client mana pun.
+ * Tanda tangan transcript handshake dengan private key RSA server (long-term,
+ * yang public key-nya sudah ditanam di client). Fungsinya BUKAN membentuk
+ * kunci — kunci dibentuk oleh X25519 — melainkan mengautentikasi public key
+ * ephemeral server supaya MITM tidak bisa menukarnya.
+ *
+ * Dipakai RSA-PSS/SHA-256 (padding tanda tangan modern), bukan enkripsi.
  */
-function unwrapSessionKey(privateKeyPem, wrappedKeyBase64) {
-  return crypto.privateDecrypt(
-    {
-      key: privateKeyPem,
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: 'sha256',
-    },
-    Buffer.from(wrappedKeyBase64, 'base64'),
-  );
+const SIGN_ALGO = 'sha256';
+
+function signOptions(key) {
+  return {
+    key,
+    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+    saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+  };
 }
 
-module.exports = { unwrapSessionKey };
+function signTranscript(privateKeyPem, transcript) {
+  return crypto.sign(SIGN_ALGO, transcript, signOptions(privateKeyPem));
+}
+
+function verifyTranscript(publicKeyPem, transcript, signature) {
+  return crypto.verify(SIGN_ALGO, transcript, signOptions(publicKeyPem), signature);
+}
+
+module.exports = { signTranscript, verifyTranscript };

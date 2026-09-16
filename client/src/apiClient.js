@@ -1,7 +1,16 @@
 'use strict';
 
 const { SERVER_URL, SERVER_PUBLIC_KEY } = require('./config');
-const { generateSessionKey, wrapSessionKey, seal, open } = require('./crypto/session');
+const {
+  generateEphemeralKeyPair,
+  publicKeyToJwk,
+  jwkToPublicKey,
+  buildTranscript,
+  verifyTranscript,
+  deriveSessionKey,
+  seal,
+  open,
+} = require('./crypto/session');
 
 /**
  * "Aplikasi" — pemegang state sesi. Session key & sessionId HANYA hidup di
@@ -22,18 +31,23 @@ class SessionClient {
   }
 
   /**
-   * Fase 1 — Handshake. Dipanggil sekali saat start, dan otomatis lagi
-   * setiap kali server bilang session_expired (Fase 4 — rotasi).
+   * Fase 1 — Handshake (X25519 ephemeral-ephemeral). Dipanggil sekali saat
+   * start, dan otomatis lagi setiap kali server bilang session_expired
+   * (Fase 4 — rotasi).
+   *
+   * Session key TIDAK dibuat acak lagi: ia dihitung (ECDHE) dari shared
+   * secret bersama server. Server tidak pernah melihat private key client,
+   * dan sebaliknya.
    *
    * `debug`, kalau diisi objek `{}`, diisi dengan apa yang sungguh dikirim
-   * (`sent`, bungkusan RSA) dan diterima (`received`, balasan polos) —
-   * dipakai UI demo untuk menampilkan Client vs Server di panel teknis.
+   * (`sent`, public key ephemeral) dan diterima (`received`, public key server
+   * + tanda tangan) — dipakai UI demo untuk panel teknis.
    */
   async handshake({ debug } = {}) {
-    const sessionKey = generateSessionKey(); // ①, di HP/di client
-    const wrappedKey = wrapSessionKey(SERVER_PUBLIC_KEY, sessionKey); // ②
+    const ephemeral = generateEphemeralKeyPair(); // ①, di HP/di client
+    const clientJwk = publicKeyToJwk(ephemeral.publicKey);
 
-    const sentBody = { wrappedKey: wrappedKey.toString('base64') };
+    const sentBody = { clientPublicKey: clientJwk };
     if (debug) debug.sent = sentBody;
 
     const res = await fetch(`${this.baseUrl}/api/session/handshake`, {
@@ -50,7 +64,26 @@ class SessionClient {
     const received = await res.json();
     if (debug) debug.received = received;
 
-    const { sessionId, expiresIn } = received;
+    const { sessionId, expiresIn, serverPublicKey, signature } = received;
+
+    const transcript = buildTranscript(clientJwk, serverPublicKey);
+
+    // ② Wajib: pastikan balasan ini memang dari server asli (public key-nya
+    //    ditandatangani kunci RSA long-term yang ditanam di client) SEBELUM
+    //    public key-nya dipakai untuk menghitung kunci.
+    if (!verifyTranscript(SERVER_PUBLIC_KEY, transcript, signature)) {
+      throw new Error('Tanda tangan server tidak valid — kemungkinan MITM, handshake dibatalkan.');
+    }
+
+    // ③ Hitung session key di sisi client. Private key ephemeral langsung
+    //    tidak dipakai lagi setelah baris ini.
+    const sessionKey = deriveSessionKey(
+      ephemeral.privateKey,
+      jwkToPublicKey(serverPublicKey),
+      Buffer.from(sessionId),
+      transcript,
+    );
+
     this.sessionId = sessionId;
     this.sessionKey = sessionKey;
     this.expiresAt = Date.now() + expiresIn * 1000;

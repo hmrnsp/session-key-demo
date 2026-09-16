@@ -81,7 +81,7 @@
   <p class="sub">Setiap pesan dikunci sebelum dikirim, jadi walau "disadap" di jalan tetap tidak terbaca.</p>
   <details class="tech-toggle intro-tech">
     <summary>Detail teknis</summary>
-    <p class="tech-note">Client (Express, port 3000) ↔ Server (Express, port 4000). Handshake RSA-OAEP sekali, lalu AES-256-GCM dua arah.</p>
+    <p class="tech-note">Client (Express, port 3000) ↔ Server (Express, port 4000). Handshake X25519 ephemeral (ECDHE) + tanda tangan RSA sekali, lalu AES-256-GCM dua arah.</p>
   </details>
 
   <div class="status">

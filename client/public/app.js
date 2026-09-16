@@ -7,8 +7,8 @@ const log = document.getElementById('log');
 
 // Diagram alur mini per aksi — 🔒 menandai langkah yang datanya terkunci.
 const HANDSHAKE_FLOW =
-  `<span class="who app">Client</span> <span class="arrow">🔒→</span> <span class="who srv">Server</span>: kirim kunci sesi terbungkus<br>` +
-  `<span class="who srv">Server</span> <span class="arrow">→</span> <span class="who app">Client</span>: balas ID sesi`;
+  `<span class="who app">Client</span> <span class="arrow">→</span> <span class="who srv">Server</span>: kirim public key sementara (X25519)<br>` +
+  `<span class="who srv">Server</span> <span class="arrow">→</span> <span class="who app">Client</span>: public key server + tanda tangan; kunci sesi dihitung di dua sisi`;
 
 const LOGIN_FLOW =
   `<span class="who app">Client</span> <span class="arrow">🔒→</span> <span class="who srv">Server</span>: username &amp; password (terkunci)<br>` +
@@ -18,12 +18,13 @@ const PROFILE_FLOW =
   `<span class="who app">Client</span> <span class="arrow">→</span> <span class="who srv">Server</span>: minta profil (tanpa data rahasia)<br>` +
   `<span class="who srv">Server</span> <span class="arrow">🔒→</span> <span class="who app">Client</span>: data profil (terkunci)`;
 
-// Header kartu "dikirim" — beda mekanisme kripto antara Handshake (RSA,
-// sekali) dan Login/Profile (AES, tiap pesan), jadi labelnya sengaja beda.
+// Header kartu "dikirim" — beda mekanisme kripto antara Handshake (X25519
+// ephemeral + tanda tangan, sekali) dan Login/Profile (AES, tiap pesan), jadi
+// labelnya sengaja beda.
 const SENT_HEADER_AES =
   `<span class="who app">Client</span> <span class="arrow">→</span> <span class="who srv">Server</span> · 🔒 Terenkripsi (tidak terbaca)`;
 const SENT_HEADER_RSA =
-  `<span class="who app">Client</span> <span class="arrow">→</span> <span class="who srv">Server</span> · 🔒 Kunci sesi dibungkus RSA (tidak terbaca)`;
+  `<span class="who app">Client</span> <span class="arrow">→</span> <span class="who srv">Server</span> · 🔑 Public key X25519 sementara (bukan rahasia)`;
 
 async function refreshStatus() {
   const res = await fetch('/demo/status');
@@ -81,19 +82,20 @@ function errorTechnical(body, sentHeader = SENT_HEADER_AES) {
   return `<div class="grid">${sentBlock}${errorBlock}</div>`;
 }
 
-// Handshake TIDAK memakai AES (session key-nya belum ada) — yang dikirim
-// dibungkus RSA-OAEP, dan balasannya sengaja polos (sessionId bukan
-// rahasia). Kartu ini dipisah dari technicalCards() supaya labelnya jujur,
-// bukan "terenkripsi/dekripsi" seperti Login/Profile.
+// Handshake TIDAK memakai AES (session key-nya belum ada). Yang lewat kabel
+// adalah public key X25519 (bukan rahasia) dan balasan server berisi public
+// key + tanda tangan RSA — dua-duanya memang tidak perlu dienkripsi. Kartu ini
+// dipisah dari technicalCards() supaya labelnya jujur, bukan
+// "terenkripsi/dekripsi" seperti Login/Profile.
 function handshakeTechnicalCards(wire, sessionKeyPreview) {
   const sentBlock = wire && wire.sent
     ? `<div class="card wire"><h3>${SENT_HEADER_RSA}</h3><pre>${JSON.stringify(wire.sent, null, 2)}</pre></div>`
     : '';
   const receivedBlock = wire && wire.received
-    ? `<div class="card plain"><h3><span class="who srv">Server</span> <span class="arrow">→</span> <span class="who app">Client</span> · ✅ Balasan (memang tidak dienkripsi)</h3><pre>${JSON.stringify(wire.received, null, 2)}</pre></div>`
+    ? `<div class="card plain"><h3><span class="who srv">Server</span> <span class="arrow">→</span> <span class="who app">Client</span> · ✅ Public key + tanda tangan (memang tidak dienkripsi)</h3><pre>${JSON.stringify(wire.received, null, 2)}</pre></div>`
     : '';
   const keyBlock = sessionKeyPreview
-    ? `<div class="card local"><h3><span class="who app">Client</span> · 🔑 Kunci sesi asli (hanya di memori, tak pernah dikirim utuh)</h3><pre>${sessionKeyPreview}</pre></div>`
+    ? `<div class="card local"><h3><span class="who app">Client</span> · 🔑 Kunci sesi hasil hitungan (hanya di memori, tidak pernah dikirim)</h3><pre>${sessionKeyPreview}</pre></div>`
     : '';
   return `<div class="grid">${sentBlock}${receivedBlock}${keyBlock}</div>`;
 }
@@ -115,7 +117,7 @@ document.getElementById('btnHandshake').addEventListener('click', async () => {
   } else {
     const minutes = Math.round(body.expiresIn / 60);
     entry('Handshake', {
-      summary: `🔑 Kunci sesi baru berhasil dibuat, berlaku ±${minutes} menit.`,
+      summary: `🔑 Kunci sesi baru berhasil dihitung (X25519), berlaku ±${minutes} menit.`,
       flow: HANDSHAKE_FLOW,
       technical: handshakeTechnicalCards(body.wire, body.sessionKeyPreview),
     });

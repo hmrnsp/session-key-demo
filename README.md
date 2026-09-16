@@ -1,9 +1,10 @@
-# Session Key Demo — RSA Handshake + AES-256-GCM Payload Encryption
+# Session Key Demo — X25519 (ECDHE) Handshake + AES-256-GCM Payload Encryption
 
 Implementasi konsep **"Alur Kunci Sesi"**: dua aplikasi Node.js/Express terpisah
 (`server/` dan `client/`) yang mendemonstrasikan skema enkripsi payload
-end-to-end di atas TLS — RSA-OAEP untuk handshake sekali, lalu AES-256-GCM
-simetris dua arah selama sesi berlangsung.
+end-to-end di atas TLS — **X25519 ephemeral-ephemeral (ECDHE)** untuk handshake
+sekali, lalu AES-256-GCM simetris dua arah selama sesi berlangsung. Session key
+tidak pernah dikirim lewat kabel; kedua sisi menghitungnya sendiri.
 
 ```
 session-key-demo/
@@ -18,18 +19,24 @@ session-key-demo/
 
 | Kunci | Dibuat di | Umur | Fungsi |
 |---|---|---|---|
-| RSA private key | Server (sekali, sebelum rilis) | Bertahun-tahun | Membuka bungkusan handshake |
-| RSA public key | Diturunkan dari private key | Sama dengan private key | Ditanam di client, hanya bisa mengunci |
-| AES-256 session key | Client, setiap sesi | 30 menit (default) | Enkripsi/dekripsi dua arah, disimpan di memori saja |
+| RSA private key | Server (sekali, sebelum rilis) | Bertahun-tahun | Menandatangani transcript handshake |
+| RSA public key | Diturunkan dari private key | Sama dengan private key | Ditanam di client, memverifikasi tanda tangan server |
+| X25519 ephemeral | Masing-masing sisi, tiap handshake | Sekali pakai | Menghitung shared secret ECDHE |
+| AES-256 session key | Diturunkan dari shared secret (dua sisi) | 30 menit (default) | Enkripsi/dekripsi dua arah, disimpan di memori saja |
 
 Alurnya:
 
 0. **Sekali di server**: generate keypair RSA-3072. Private key tidak pernah
-   keluar dari server. Public key diserahkan ke client (`server-public.pem`).
-1. **Handshake** (sekali per sesi): client membuat AES-256 key acak,
-   membungkusnya dengan RSA public key (`RSA-OAEP/sha256`), kirim ke
-   `POST /api/session/handshake`. Server membuka bungkusan dengan private key,
-   menyimpan session key di store (30 menit), balas `sessionId`.
+   keluar dari server. Public key diserahkan ke client (`server-public.pem`)
+   dan ditanam saat build.
+1. **Handshake** (sekali per sesi, X25519 ephemeral-ephemeral): client membuat
+   keypair X25519 sekali pakai dan mengirim public key-nya ke
+   `POST /api/session/handshake`. Server membuat keypair X25519-nya sendiri,
+   menghitung `shared = X25519(priv, clientPub)`, menurunkan session key dengan
+   `HKDF-SHA256`, lalu membalas public key-nya + tanda tangan RSA-PSS atas
+   transcript. Client memverifikasi tanda tangan itu dengan public key yang
+   ditanam, lalu menghitung session key yang sama dari sisinya. Session key
+   **tidak pernah dikirim lewat kabel**.
 2. **Request**: client mengenkripsi body dengan AES-256-GCM (IV acak 12 byte
    tiap pesan), kirim `{ iv, data, tag }` + header `X-Session-Id`. Middleware
    server mendekripsinya sebelum masuk ke controller — controller menerima
@@ -97,9 +104,21 @@ dan mengulang request tanpa pengguna melihat apa pun.
 
 - Public key **wajib** ditanam saat build (`client/keys/server-public.pem`),
   bukan diunduh dari endpoint API — kalau diunduh, penyerang man-in-the-middle
-  bisa menukarnya dan seluruh skema runtuh tanpa gejala.
+  bisa menukarnya dan seluruh skema runtuh tanpa gejala. Di skema X25519 ini
+  public key tersebut dipakai untuk **memverifikasi tanda tangan** server, dan
+  client menolak handshake kalau tanda tangannya tidak valid.
+- Shared secret mentah X25519 **wajib** dilewatkan `HKDF-SHA256` sebelum jadi
+  kunci AES-256 (output X25519 tidak seragam). `info` HKDF diisi transcript
+  handshake (versi protokol + kedua public key) supaya kunci terikat ke kedua
+  belah pihak dan tidak bisa di-replay.
+- Keypair X25519 bersifat **ephemeral**: dibuat baru tiap handshake dan
+  private key-nya dibuang setelah shared secret dihitung, sehingga private key
+  RSA long-term yang bocor di masa depan tidak bisa membuka sesi lama
+  (forward secrecy). Private key RSA hanya menandatangani, bukan membentuk
+  kunci.
 - Session key **hanya** hidup di memori proses (di client dan di server),
-  tidak pernah ditulis ke disk/file/`localStorage` sederajat.
+  tidak pernah ditulis ke disk/file/`localStorage` sederajat, dan tidak pernah
+  dikirim lewat kabel.
 - IV AES-GCM harus selalu 12 byte acak baru per pesan — lihat komentar
   `WAJIB baru tiap pesan` di kode.
 - `decipher.final()` selalu dipanggil (Node melakukan ini secara implisit
@@ -115,7 +134,8 @@ dan mengulang request tanpa pengguna melihat apa pun.
   file tersebut.
 - Lapisan ini dipasang **di atas** TLS 1.2+ dan certificate pinning, bukan
   menggantikannya.
-- Upgrade lanjutan yang disebut di konsep asli: ganti RSA-OAEP handshake
-  dengan **ECDH X25519** supaya session key tidak pernah dikirim sama sekali
-  (dihitung serentak di dua sisi) — memberi forward secrecy kalau private key
-  server suatu hari bocor. Struktur kode lain tidak berubah.
+- Upgrade lanjutan yang disebut di konsep asli sudah diterapkan di sini:
+  handshake RSA-OAEP diganti **ECDH X25519 ephemeral-ephemeral** yang
+  diautentikasi tanda tangan RSA, sehingga session key tidak pernah dikirim
+  dan sesi lama tetap aman walau private key long-term bocor. Struktur kode
+  lain (middleware, store, controller) tidak berubah.
