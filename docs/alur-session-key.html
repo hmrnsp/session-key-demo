@@ -61,6 +61,21 @@
   .panel.active{display:block}
   .panel-sub{color:var(--ink-soft);font-size:13.5px;margin:0 0 14px}
 
+  /* penjelasan sederhana di awal panel */
+  details.intro{background:var(--surface2);border:1px solid color-mix(in srgb,var(--key) 40%, transparent);
+    border-radius:10px;padding:12px 16px;margin:0 0 16px}
+  details.intro>summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--key);
+    list-style:none;user-select:none}
+  details.intro>summary::-webkit-details-marker{display:none}
+  details.intro>summary::before{content:'▾ '}
+  details.intro:not([open])>summary::before{content:'▸ '}
+  .analogy{font-size:13.5px;margin:10px 0;line-height:1.65}
+  pre.diagram{background:#0A0F16;border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;overflow:auto;font-size:12px;line-height:1.5;color:var(--ink)}
+  .simplesteps{margin:10px 0;padding-left:20px;font-size:13.5px;line-height:1.7}
+  .simplesteps li{margin:5px 0}
+  details.intro .note{margin:10px 0 0}
+
   /* ---------- stepper ---------- */
   .stepper{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
   .stepper button{background:var(--surface2);color:var(--ink);border:1px solid var(--line);
@@ -270,26 +285,60 @@ const FLOWS = {
   handshake: {
     label: '1. Handshake',
     subtitle: 'Sekali per sesi. Membuat dua keypair X25519 ephemeral, menghitung session key bersama, dan mengautentikasi server dengan tanda tangan RSA. Session key TIDAK pernah dikirim.',
+    intro: {
+      heading: 'Versi sederhana — baca ini dulu',
+      analogy: 'Bayangkan dua orang ingin membuat **warna rahasia yang sama** tanpa pernah mengirim warna itu. Caranya: masing-masing punya warna rahasia pribadi, lalu mencampurnya dengan warna publik lawan. Hasil campuran di dua sisi ternyata **sama persis**, dan penyadap tidak bisa memisahkan warna campuran itu kembali. X25519 melakukan hal yang sama, hanya dengan angka alih-alih cat.',
+      diagram: [
+        'CLIENT  ──── (1) kunci publik client ─────────────────▶  SERVER',
+        'CLIENT  ◀─── (2) kunci publik server + tanda tangan ───  SERVER',
+        '',
+        'Setelah itu TIDAK ADA lagi yang dikirim. Masing-masing menghitung sendiri:',
+        '',
+        '   client :  kunci rahasia client  +  kunci publik server',
+        '   server :  kunci rahasia server  +  kunci publik client',
+        '                        │',
+        '                        ▼',
+        '                 hasil SAMA PERSIS',
+        '                        │',
+        '                        ▼',
+        '            ★  KUNCI SESI (AES-256)  ★',
+        '     dihitung di dua sisi — tidak pernah lewat kabel',
+      ].join('\n'),
+      steps: [
+        '`Client` membuat **sepasang kunci sekali pakai**: satu publik (boleh dilihat siapa saja) dan satu rahasia (disimpan sendiri, tidak pernah dikirim).',
+        '`Client` mengirim kunci **publik**-nya ke server. Karena publik, tidak masalah kalau disadap di jalan.',
+        '`Server` juga membuat sepasang kuncinya sendiri, lalu membalas dengan kunci publiknya **+ tanda tangan** (seperti stempel resmi).',
+        '`Client` memeriksa stempel itu dengan "contoh stempel asli" yang sudah ditanam saat build. Kalau tidak cocok → handshake dibatalkan (itu tanda ada penyadap).',
+        'Sekarang keduanya **mencampur**: kunci rahasia sendiri + kunci publik lawan. Hasilnya **sama persis** di dua sisi.',
+        'Hasil campuran itulah **kunci sesi**, dipakai untuk mengunci semua pesan berikutnya (login, profil). Kunci ini tidak pernah dikirim lewat kabel.',
+      ],
+      nots: 'Ringkasnya: handshake mengamankan **saluran**-nya, bukan membuktikan **siapa** client-nya. Siapa pun boleh memulai handshake; sesi itu praktis "milik" pengirimnya karena hanya dia yang punya kunci rahasia untuk menghitung kunci sesi. Identitas baru dibuktikan di langkah **Login**.',
+    },
     steps: [
       {
-        side: 'client', title: 'Client membuat kunci ephemeral X25519',
-        in: ['(tidak ada — mulai dari nol)'],
+        side: 'client', title: 'Client membuat kunci sekali pakai (X25519)',
+        in: ['Belum ada apa-apa — sesi dimulai dari nol'],
         op: [
-          "generateKeyPairSync('x25519') → { publicKey, privateKey }",
-          "export publicKey ke JWK (kty/crv/x)",
+          'Bikin pasangan kunci: satu `publicKey` (boleh dibagikan) dan satu `privateKey` (rahasia)',
+          'Ekspor kunci publiknya ke JWK (format JSON) supaya bisa dikirim lewat HTTP',
         ],
         out: [
-          'clientPub = { kty:"OKP", crv:"X25519", x:"<32B base64url>" }',
-          'clientPriv — RAHASIA, tetap di memori client',
+          '`clientPub` (JWK) → akan dikirim ke server',
+          '`clientPriv` → RAHASIA, disimpan di memori client, tidak pernah dikirim',
         ],
-        code: "const eph = crypto.generateKeyPairSync('x25519');\nconst clientJwk = eph.publicKey.export({ format: 'jwk' });\n// eph.privateKey tidak pernah dikirim ke mana pun",
+        code: "const eph = crypto.generateKeyPairSync('x25519');\nconst clientJwk = eph.publicKey.export({ format: 'jwk' });\n// { kty:'OKP', crv:'X25519', x:'<32 byte base64url>' }\n// eph.privateKey = RAHASIA, tetap di memori client",
       },
       {
-        side: 'client', title: 'Client mengirim public key-nya',
-        op: ['JSON.stringify({ clientPublicKey: clientJwk })'],
-        out: ['POST /api/session/handshake', 'Header: Content-Type: application/json'],
+        side: 'client', title: 'Client mengirim kunci publiknya ke server',
+        in: ['`clientPub` (JWK)'],
+        op: [
+          'Bungkus jadi JSON: `{ clientPublicKey: clientPub }`',
+          'Kirim lewat HTTP POST — masih polos, karena belum ada kunci untuk enkripsi',
+        ],
+        out: ['`POST /api/session/handshake`', 'Header: `Content-Type: application/json`'],
+        code: "const body = JSON.stringify({ clientPublicKey: clientJwk });\nconst res = await fetch(baseUrl + '/api/session/handshake', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body,\n});",
         msg: {
-          dir: 'c2s', label: 'Request handshake (memang polos — ini kunci publik)',
+          dir: 'c2s', label: 'Request handshake (memang polos — isinya cuma kunci publik)',
           encrypted: false,
           wire: {
             clientPublicKey: { kty: 'OKP', crv: 'X25519', x: 'tzzPNo-zQGrcmQZx_zVAkOJ6kV3HnZaLTY0aue6C7F8' },
@@ -297,8 +346,8 @@ const FLOWS = {
         },
       },
       {
-        side: 'server', title: 'Server memvalidasi public key client',
-        in: ['body.clientPublicKey (JWK) — dikirim polos oleh client'],
+        side: 'server', title: 'Server memvalidasi kunci publik client',
+        in: ['`body.clientPublicKey` (JWK) yang baru diterima dari kabel'],
         op: [
           'Lapis 1 — bentuk: `jwk` harus ada (truthy) dan field `x` bertipe string',
           "Lapis 2 — parameter: `kty === 'OKP'` dan `crv === 'X25519'` (dicek manual)",
@@ -306,66 +355,85 @@ const FLOWS = {
           'Gagal di lapis mana pun → throw, ditangkap try/catch → satu balasan 400 yang sama (tidak membocorkan detail)',
         ],
         out: [
-          'clientPub (KeyObject X25519) siap dipakai `diffieHellman`',
+          '`clientPub` (KeyObject X25519) siap dipakai `diffieHellman`',
           'invalid → `res.status(400).json({ error: "clientPublicKey (JWK X25519) wajib diisi" })`',
         ],
         note: "Kenapa cek crv manual penting: Node MENERIMA JWK ber-crv 'Ed25519' dan menghasilkan KeyObject bertipe ed25519 (bukan X25519) — jadi tanpa cek manual, tipe kunci yang salah bisa lolos. Node sendiri menolak x yang salah panjang/encoding dengan ERR_CRYPTO_INVALID_JWK, dan kty/x yang hilang dengan ERR_INVALID_ARG_TYPE.",
         code: "function jwkToPublicKey(jwk) {\n  if (!jwk || jwk.kty !== 'OKP' ||\n      jwk.crv !== 'X25519' || typeof jwk.x !== 'string') {\n    throw new Error('public key X25519 (JWK) tidak valid');\n  }\n  // Node memvalidasi encoding base64url & panjang x (harus 32 byte);\n  // JWK cacat -> ERR_CRYPTO_INVALID_JWK.\n  return crypto.createPublicKey({ key: jwk, format: 'jwk' });\n}\n\n// handshake.js — SEMUA kegagalan jadi satu balasan generik\ntry {\n  clientPublic = jwkToPublicKey(clientPublicKey);\n} catch (err) {\n  return res.status(400).json({ error: 'clientPublicKey (JWK X25519) wajib diisi' });\n}",
       },
       {
-        side: 'server', title: 'Server membuat kunci ephemeral X25519 sendiri',
-        op: ["generateKeyPairSync('x25519')", 'export publicKey ke JWK'],
-        out: ['serverPub (dikirim)', 'serverPriv — RAHASIA, dibuang setelah dipakai'],
+        side: 'server', title: 'Server membuat kunci sekali pakai miliknya sendiri',
+        in: ['(tidak perlu input dari luar)'],
+        op: [
+          "Bikin pasangan kunci X25519 BARU khusus untuk sesi ini",
+          'Ekspor kunci publiknya ke JWK',
+        ],
+        out: [
+          '`serverPub` (JWK) → akan dikirim balik ke client',
+          '`serverPriv` → RAHASIA, dipakai menghitung lalu langsung dibuang',
+        ],
         code: "const serverEph = crypto.generateKeyPairSync('x25519');\nconst serverJwk = serverEph.publicKey.export({ format: 'jwk' });",
       },
       {
         side: 'server', title: 'Server membuat sessionId acak',
-        op: ['crypto.randomUUID()'],
-        out: ['sessionId (UUID) — dipakai sebagai salt HKDF & kunci store'],
+        in: ['(tidak perlu input)'],
+        op: [
+          'Buat UUID acak sebagai ID sesi',
+          'Dipakai juga sebagai `salt` HKDF dan kunci penyimpanan `sk:<id>`',
+        ],
+        out: ['`sessionId` (UUID)'],
         code: "const sessionId = crypto.randomUUID();",
       },
       {
-        side: 'both', title: 'Kedua sisi menyusun transcript yang identik',
+        side: 'both', title: 'Kedua sisi menyusun "transcript" yang identik',
+        in: ['`clientPub.x` dan `serverPub.x`', 'label versi protokol'],
         op: [
-          "Buffer.from('session-key-demo/x25519/v1\\n' + client.x + '\\n' + server.x)",
+          'Gabung dengan urutan TETAP: versi protokol, lalu x client, lalu x server',
+          'Hasilnya harus sama persis di client dan server',
         ],
-        out: ['transcript (bytes) — urutan tetap: client dulu, lalu server'],
-        note: 'Transcript inilah yang ditandatangani server dan diverifikasi client, sehingga kedua public key terikat pada satu sesi.',
+        out: ['`transcript` (bytes) — bahan yang nanti ditandatangani'],
+        note: 'Transcript inilah yang ditandatangani server dan diverifikasi client, sehingga kedua kunci publik terikat pada satu sesi.',
         code: "const transcript = Buffer.from(\n  'session-key-demo/x25519/v1\\n' + client.x + '\\n' + server.x,\n  'utf8');",
       },
       {
-        side: 'server', title: 'Server menghitung shared secret & menurunkan session key',
+        side: 'server', title: 'Server menghitung rahasia bersama → kunci sesi',
+        in: ['`serverPriv` (rahasia)', '`clientPub`', '`sessionId` (salt)', '`transcript` (info)'],
         op: [
-          '`diffieHellman({ privateKey: serverPriv, publicKey: clientPub })` → shared 32B',
-          'guard: tolak jika shared semua byte 0 (indikasi titik orde rendah)',
-          "`hkdfSync('sha256', shared, salt=Buffer.from(sessionId), info=transcript, 32)`",
+          '`diffieHellman(...)` → "mencampur": rahasia server + publik client = shared 32 byte',
+          'Tolak kalau shared semua byte 0 (kunci tidak valid)',
+          "`hkdfSync('sha256', ...)` → ubah shared jadi kunci AES-256",
         ],
-        out: ['sessionKey (32 byte = AES-256)'],
-        note: 'Di Node/OpenSSL, public key tidak valid semacam titik all-zero biasanya sudah ditolak saat diffieHellman (ERR_OSSL_FAILED_DURING_DERIVATION); pemeriksaan all-zero eksplisit tetap dipertahankan sebagai pengaman portabel. Kegagalan apa pun → 400 key_exchange_failed.',
+        out: ['`sessionKey` (32 byte) — disimpan di server, tidak dikirim'],
+        note: 'Inilah momen "mencampur warna" dari analogi: hasilnya nanti sama dengan milik client, padahal tidak ada kunci yang pernah dikirim. Di Node/OpenSSL, kunci tidak valid (mis. titik all-zero) biasanya sudah ditolak saat diffieHellman (ERR_OSSL_FAILED_DURING_DERIVATION); cek all-zero eksplisit tetap ada sebagai pengaman portabel. Kegagalan → 400 key_exchange_failed.',
         code: "const shared = crypto.diffieHellman({\n  privateKey: serverEph.privateKey, publicKey: clientPub,\n});\nif (shared.every((b) => b === 0)) throw new Error('shared nol');\nconst sessionKey = Buffer.from(\n  crypto.hkdfSync('sha256', shared, Buffer.from(sessionId), transcript, 32));",
       },
       {
-        side: 'server', title: 'Server membuang private key ephemeral',
-        op: ['serverEph.privateKey = null'],
-        out: ['tidak ada salinan private eph yang tersisa'],
-        note: 'Inilah yang memberi forward secrecy: private key sekali pakai, bukan kunci panjang umur.',
+        side: 'server', title: 'Server membuang kunci privat sekali pakai',
+        in: ['`serverPriv`'],
+        op: ['Hapus referensinya supaya tidak ada salinan tersisa di memori'],
+        out: ['`serverPriv` hilang — tugasnya sudah selesai'],
+        note: 'Inilah yang memberi forward secrecy: kuncinya sekali pakai, bukan kunci panjang umur. Kalau kunci server bocor nanti, sesi lama tetap aman.',
         code: "serverEph.privateKey = null;",
       },
       {
-        side: 'server', title: 'Server menandatangani transcript dengan kunci RSA long-term',
+        side: 'server', title: 'Server menandatangani transcript (stempel resmi)',
+        in: ['`transcript`', 'kunci RSA privat server (long-term, dari `private.pem`)'],
         op: [
-          "sign('sha256', transcript, { padding: RSA_PKCS1_PSS_PADDING, saltLength: RSA_PSS_SALTLEN_DIGEST, key: private.pem })",
+          "`sign('sha256', transcript, ...)` dengan padding RSA-PSS",
+          'Hanya server yang punya kunci privat ini, jadi hanya server yang bisa membuat stempel ini',
         ],
-        out: ['signature (base64)'],
+        out: ['`signature` (base64) — bukti keaslian server'],
         code: "const signature = crypto.sign('sha256', transcript, {\n  key: SERVER_SIGNING_KEY,\n  padding: crypto.constants.RSA_PKCS1_PSS_PADDING,\n  saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,\n}).toString('base64');",
       },
       {
-        side: 'server', title: 'Server menyimpan session key & membalas',
+        side: 'server', title: 'Server menyimpan kunci sesi & membalas',
+        in: ['`sessionId`', '`sessionKey`', '`serverPub`', '`signature`'],
         op: [
-          "sessionStore.set('sk:<sessionId>', base64(sessionKey), TTL=1800)",
-          'res.json({ sessionId, expiresIn, serverPublicKey, signature })',
+          "Simpan session key: `sessionStore.set('sk:<sessionId>', ..., TTL)`",
+          'Balas `{ sessionId, expiresIn, serverPublicKey, signature }`',
         ],
-        out: ['balasan polos (tidak perlu dienkripsi: public key + tanda tangan)'],
+        out: ['balasan polos — isinya kunci publik + tanda tangan, memang tidak perlu dienkripsi'],
+        code: "await sessionStore.set('sk:' + sessionId, sessionKey.toString('base64'), 1800);\nres.json({ sessionId, expiresIn: 1800, serverPublicKey: serverJwk, signature });",
         msg: {
           dir: 's2c', label: 'Response handshake', encrypted: false,
           wire: {
@@ -377,30 +445,40 @@ const FLOWS = {
         },
       },
       {
-        side: 'client', title: 'Client memverifikasi tanda tangan (WAJIB)',
-        in: ['serverPublicKey, signature'],
+        side: 'client', title: 'Client memverifikasi stempel server (WAJIB)',
+        in: ['`serverPublicKey`, `signature`', '`SERVER_PUBLIC_KEY` — contoh stempel asli yang ditanam saat build'],
         op: [
-          'susun transcript yang sama',
-          "verify('sha256', transcript, { key: server-public.pem, PSS }, signature)",
-          'jika false → lempar error & BATALKAN handshake',
+          'Susun `transcript` yang sama persis',
+          "`verify('sha256', transcript, ...)` memakai kunci publik server",
+          'Kalau hasilnya false → lempar error & BATALKAN handshake',
         ],
-        out: ['key terautentikasi', 'penyerang/MITM tidak bisa menukar serverPublicKey'],
+        out: [
+          '`serverPublicKey` terbukti asli',
+          'MITM tidak bisa menukar kunci server tanpa ketahuan',
+        ],
         code: "const transcript = buildTranscript(clientJwk, serverPublicKey);\nconst ok = crypto.verify('sha256', transcript, {\n  key: SERVER_PUBLIC_KEY,\n  padding: crypto.constants.RSA_PKCS1_PSS_PADDING,\n  saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,\n}, Buffer.from(signature, 'base64'));\nif (!ok) throw new Error('Tanda tangan server tidak valid — kemungkinan MITM');",
       },
       {
-        side: 'client', title: 'Client menghitung session key yang sama',
+        side: 'client', title: 'Client menghitung kunci sesi yang sama',
+        in: ['`clientPriv` (rahasia)', '`serverPub` (baru diverifikasi)', '`sessionId` (salt)', '`transcript` (info)'],
         op: [
-          'diffieHellman({ privateKey: clientPriv, publicKey: serverPub }) → shared',
-          'hkdfSync(...) dengan salt & info yang sama persis',
+          '`diffieHellman(...)` → "mencampur": rahasia client + publik server',
+          'Hasil shared-nya SAMA dengan milik server (sifat matematika X25519)',
+          '`hkdfSync(...)` dengan salt & info yang sama → kunci AES-256',
         ],
-        out: ['sessionKey (32B) — harus identik dengan milik server'],
+        out: ['`sessionKey` (32 byte) — identik dengan milik server'],
+        note: 'Sampai di sini dua sisi punya kunci yang sama, padahal kunci itu tidak pernah dikirim lewat kabel. Inilah inti handshake.',
         code: "const shared = crypto.diffieHellman({\n  privateKey: eph.privateKey, publicKey: jwkToPublicKey(serverPublicKey),\n});\nconst sessionKey = Buffer.from(\n  crypto.hkdfSync('sha256', shared, Buffer.from(sessionId), transcript, 32));",
       },
       {
         side: 'client', title: 'Client menyimpan sesi di memori',
-        op: ['simpan sessionId, sessionKey, expiresAt = now + expiresIn×1000'],
-        out: ['sesi siap dipakai Login & Get Profile'],
-        note: 'Session key hanya hidup sebagai variabel di memori proses — tidak ditulis ke disk/localStorage, dan tidak pernah dikirim utuh.',
+        in: ['`sessionId`, `sessionKey`, `expiresIn`'],
+        op: [
+          'Simpan ke variabel di memori proses',
+          'Hitung waktu kedaluwarsa: `now + expiresIn × 1000`',
+        ],
+        out: ['Sesi siap dipakai Login & Get Profile'],
+        note: 'Session key hanya hidup sebagai variabel di memori — tidak ditulis ke disk/localStorage, dan tidak pernah dikirim utuh.',
         code: "this.sessionId = sessionId;\nthis.sessionKey = sessionKey; // Buffer, hanya di memori\nthis.expiresAt = Date.now() + expiresIn * 1000;",
       },
     ],
@@ -619,9 +697,11 @@ const FLOWS = {
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-// esc lalu dukung inline `code` (backtick) -> <code>
+// esc lalu dukung `code` (backtick) -> <code> dan **tebal** -> <b>
 function rc(s) {
-  return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+  return esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 }
 function fmt(v) {
   return typeof v === 'string' ? v : JSON.stringify(v, null, 2);
@@ -674,11 +754,22 @@ function stepCard(flowKey, step, i) {
     msgBlock(step.msg, uid) +
   '</article>';
 }
+function introBlock(intro) {
+  if (!intro) return '';
+  return '<details class="intro" open>' +
+    '<summary>' + esc(intro.heading) + '</summary>' +
+    (intro.analogy ? '<p class="analogy">' + rc(intro.analogy) + '</p>' : '') +
+    (intro.diagram ? '<pre class="diagram">' + esc(intro.diagram) + '</pre>' : '') +
+    (intro.steps ? '<ol class="simplesteps">' + intro.steps.map((s) => '<li>' + rc(s) + '</li>').join('') + '</ol>' : '') +
+    (intro.nots ? '<p class="note">' + rc(intro.nots) + '</p>' : '') +
+  '</details>';
+}
 function flowPanel(key, flow) {
   const pills = flow.steps.map((_, i) =>
     '<button class="pillstep' + (i === 0 ? ' active' : '') + '" data-jump="' + i + '">' + (i + 1) + '</button>').join('');
   return '<section class="panel' + (key === 'handshake' ? ' active' : '') + '" data-flow="' + key + '">' +
     '<p class="panel-sub">' + esc(flow.subtitle) + '</p>' +
+    introBlock(flow.intro) +
     '<div class="stepper">' +
       '<button data-act="prev" disabled>‹ Sebelumnya</button>' +
       '<span class="counter">Langkah <b data-cur>1</b> / ' + flow.steps.length + '</span>' +

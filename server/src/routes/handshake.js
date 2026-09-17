@@ -36,6 +36,10 @@ router.post('/handshake', express.json(), async (req, res) => {
   const serverJwk = publicKeyToJwk(serverEphemeral.publicKey);
 
   const sessionId = crypto.randomUUID();
+
+  // transcript (versi + kedua public key)
+  // adalah data yang akan ditandatangani oleh server untuk memastikan
+  // bahwa balasan ini memang dari server asli.
   const transcript = buildTranscript(clientPublicKey, serverJwk);
 
   let sessionKey;
